@@ -1,10 +1,13 @@
 import { z } from "zod";
 
-import { createTRPCRouter, publicProcedure } from "../trpc";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc";
 
 export const postRouter = createTRPCRouter({
   all: publicProcedure.query(({ ctx }) => {
-    return ctx.prisma.post.findMany({ orderBy: { id: "desc" } });
+    return ctx.prisma.post.findMany({ orderBy: { id: "desc" }, include: {like: true} });
+  }),
+  amount: protectedProcedure.query(({ ctx }) => {
+    return ctx.prisma.post.count({ orderBy: { id: "desc" } });
   }),
   byId: publicProcedure.input(z.string()).query(({ ctx, input }) => {
     return ctx.prisma.post.findFirst({ where: { id: input } });

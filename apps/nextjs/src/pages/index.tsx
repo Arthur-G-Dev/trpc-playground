@@ -8,7 +8,13 @@ import { api, type RouterOutputs } from "~/utils/api";
 const PostCard: React.FC<{
   post: RouterOutputs["post"]["all"][number];
   onPostDelete?: () => void;
-}> = ({ post, onPostDelete }) => {
+  onLike?: () => void;
+}> = ({ post, onPostDelete, onLike }) => {
+  const { data: session } = api.auth.getSession.useQuery();
+  const userLiked = post.like.some(
+    (el: any) => el.user_id === session?.user.id,
+  );
+  console.log("LIKED", userLiked);
   return (
     <div className="flex w-full max-w-2xl flex-row rounded-lg bg-white/10 p-4 transition-all hover:scale-[101%]">
       <div className="flex-grow">
@@ -17,13 +23,22 @@ const PostCard: React.FC<{
         </h2>
         <p className="mt-2 text-sm">{post.content || <i>No content</i>}</p>
       </div>
-      <div>
-        <span
+      <div className="flex flex-col items-end justify-between">
+        <button
           className="cursor-pointer text-sm font-bold uppercase text-pink-400"
           onClick={onPostDelete}
         >
           Delete
-        </span>
+        </button>
+        <button
+          disabled={!session}
+          className={`mt-4  d-block cursor-pointer text-sm font-bold uppercase 
+          ${userLiked ? "text-red-400" : "text-green-400"}
+          ${!session ?' disabled:opacity-30' : ''}`}
+          onClick={onLike}
+        >
+          {userLiked ? "Liked" : "Like"}: {post.like.length}
+        </button>
       </div>
     </div>
   );
@@ -31,7 +46,6 @@ const PostCard: React.FC<{
 
 const CreatePostForm: React.FC = () => {
   const utils = api.useContext();
-
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
 
@@ -40,6 +54,7 @@ const CreatePostForm: React.FC = () => {
       setTitle("");
       setContent("");
       await utils.post.all.invalidate();
+      await utils.post.amount.invalidate();
     },
   });
 
@@ -74,9 +89,23 @@ const CreatePostForm: React.FC = () => {
 
 const Home: NextPage = () => {
   const postQuery = api.post.all.useQuery();
-
+  const countQuery = api.post.amount.useQuery();
+  const { data: session } = api.auth.getSession.useQuery();
   const deletePostMutation = api.post.delete.useMutation({
-    onSettled: () => postQuery.refetch(),
+    onSettled: async () => {
+      await postQuery.refetch();
+      await countQuery.refetch();
+    },
+  });
+
+  const createLIkeMutation = api.like.create.useMutation({
+    onSuccess: async () => {
+      await postQuery.refetch();
+      await countQuery.refetch();
+    },
+    onError: (err) => {
+      console.log("ERR", err);
+    },
   });
 
   return (
@@ -92,7 +121,11 @@ const Home: NextPage = () => {
             Create <span className="text-[hsl(280,100%,70%)]">T3</span> Turbo
           </h1>
           <AuthShowcase />
-
+          {session ? (
+            <h5>Total Posts: {countQuery.data || 0}</h5>
+          ) : (
+            <h6>N/A</h6>
+          )}
           <CreatePostForm />
 
           {postQuery.data ? (
@@ -107,6 +140,12 @@ const Home: NextPage = () => {
                         <PostCard
                           key={p.id}
                           post={p}
+                          onLike={() => {
+                            createLIkeMutation.mutate({
+                              post_id: p.id,
+                              user_id: session?.user.id as string,
+                            });
+                          }}
                           onPostDelete={() => deletePostMutation.mutate(p.id)}
                         />
                       );
